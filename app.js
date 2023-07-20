@@ -1,61 +1,62 @@
-const express = require("express");
-const yargs = require("yargs");
-const Jimp = require("jimp");
+// Importar las bibliotecas necesarias
+import express from 'express';
+import yargs from 'yargs';
+import { hideBin } from 'yargs/helpers';
+import Jimp from 'jimp';
+import { promises as fs } from 'fs';
+import { fileURLToPath } from 'url';
+import path from 'path';
+import hbs from "hbs";
 
+// Calcular __dirname en ES6
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Crear la aplicación Express
 const app = express();
-const argv = yargs.argv;
 
-// Requisito 1: Comprobar si el valor de la propiedad 'key' es correcta (123)
-const key = argv.key;
-if (key !== 123) {
-  console.error("Clave incorrecta. No se puede iniciar el servidor.");
-  process.exit(1);
+//view engine motor de vistas
+app.set("view engine", "hbs");
+app.set('views', path.join(__dirname, 'views'));
+
+// Configurar Yargs
+const argv = yargs(hideBin(process.argv))
+  .option('key', {
+    alias: 'k',
+    description: 'Key para arrancar el servidor',
+    type: 'string',
+  })
+  .help()
+  .alias('help', 'h')
+  .argv;
+
+// Verificar la clave
+if (argv.key !== '123') {
+  console.log('Key incorrecta. El servidor no se iniciará.');
+  process.exit();
 }
 
-// Requisito 2: Ruta raíz que devuelve el formulario para ingresar la URL de la imagen
-app.get("/", (req, res) => {
-  res.send(`
-    <html>
-      <head>
-        <link rel="stylesheet" href="/styles.css">
-      </head>
-      <body>
-        <h1>Black and White Spa</h1>
-        <form action="/processImage" method="post">
-          <label for="imageUrl">Ingresa la URL de la imagen:</label>
-          <input type="text" name="imageUrl" required>
-          <button type="submit">Procesar Imagen</button>
-        </form>
-      </body>
-    </html>
-  `);
+// Ruta para servir los archivos estáticos (CSS)
+app.use(express.static('public'));
+
+// Ruta principal con el formulario
+app.get('/', (req, res) => {
+  res.render("vista");
 });
 
-// Requisito 3: Servir archivo CSS alojado en el servidor
-app.use("/styles.css", express.static(__dirname + "/styles.css"));
+// Ruta para procesar la imagen
+app.get('/process', async (req, res) => {
+  const imageUrl = req.query.url;
 
-// Requisito 4: Ruta para procesar la imagen y devolverla en blanco y negro
-app.post("/processImage", async (req, res) => {
-  const imageUrl = req.body.imageUrl;
+  const image = await Jimp.read(imageUrl);
+  await image
+    .greyscale() // hacer la imagen en blanco y negro
+    .quality(60) // establecer la calidad de la imagen a 60
+    .resize(350, Jimp.AUTO) // redimensionar la imagen
+    .writeAsync('newImg.jpg'); // guardar la imagen
 
-  try {
-    const image = await Jimp.read(imageUrl);
-
-    // Procesar imagen en escala de grises, con calidad 60% y redimensionada a 350px de ancho
-    image.greyscale().quality(60).resize(350, Jimp.AUTO);
-
-    // Guardar la imagen procesada en un archivo llamado 'newImg.jpg'
-    await image.writeAsync("newImg.jpg");
-
-    // Devolver la imagen procesada al cliente
-    res.sendFile(__dirname + "/newImg.jpg");
-  } catch (error) {
-    console.error("Error al procesar la imagen:", error);
-    res.status(500).send("Hubo un error al procesar la imagen.");
-  }
+  res.sendFile(path.join(__dirname, '/newImg.jpg'));
 });
 
-const PORT = 3000;
-app.listen(PORT, () => {
-  console.log(`Servidor en línea en http://localhost:${PORT}`);
-});
+// Iniciar el servidor
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
